@@ -44,7 +44,7 @@ def seed_customers(app) -> None:
         s.commit()
 
 
-def seed(wait_s: float = 30.0) -> int:
+def seed(wait_s: float = 15.0) -> int:
     configure_logging()
     app = build_context(Settings.from_env())
     try:
@@ -65,8 +65,8 @@ def seed(wait_s: float = 30.0) -> int:
                 break
             except Exception:
                 if time.time() > deadline:
-                    log.error("simulated services unreachable; seed skipped")
-                    return 1
+                    log.warning("simulated services unreachable; scenario seed skipped (app will start normally)")
+                    return 0
                 time.sleep(1)
         for scenario, variant in DEMO:
             order = scenarios.inject(app, scenario, variant)

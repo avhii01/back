@@ -347,3 +347,18 @@ class LLMCall(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class TeamMember(Base):
+    """A member of the operational support team who resolves customer tickets."""
+
+    __tablename__ = "team_members"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    role: Mapped[str] = mapped_column(String(80))
+    department: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    active_tickets_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -23,7 +23,7 @@ from relay.config import Settings
 from relay.context import AppContext, build_context
 from relay.errors import ToolError
 from relay.logging_utils import configure_logging
-from relay.models import Approval, Customer, Order, Run, SupportTicket
+from relay.models import Approval, Customer, Order, Run, SupportTicket, TeamMember
 from relay.support import jobs
 from relay.support.demo import SCENARIO_OWNER
 
@@ -31,6 +31,24 @@ from relay.support.demo import SCENARIO_OWNER
 class AdminSignInBody(BaseModel):
     email: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=1, max_length=200)
+
+
+class TeamMemberCreate(BaseModel):
+    id: str | None = None
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=1, max_length=200)
+    role: str = Field(min_length=1, max_length=80)
+    department: str = Field(min_length=1, max_length=120)
+    status: str = Field(default="active", max_length=20)
+    active_tickets_count: int = Field(default=0, ge=0)
+
+
+class TeamMemberUpdate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    department: str | None = None
+    status: str | None = None
+    active_tickets_count: int | None = None
 
 
 class InjectBody(BaseModel):
@@ -250,6 +268,100 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             from relay.support.tickets import sync_tickets_for_order
             sync_tickets_for_order(app_ctx, result.approval.order_id)
         return {"approval": ser.approval_json(result.approval), "applied": result.applied, "run_resumed": resumed}
+
+    # ------------------------------------------------------------------ team members
+    @app.get("/api/team")
+    def list_team_members():
+        with app_ctx.session() as s:
+            members = list(s.scalars(select(TeamMember).order_by(TeamMember.created_at.asc())))
+            if not members:
+                from relay.seed import DEFAULT_SEEDED_TEAM
+                for data in DEFAULT_SEEDED_TEAM:
+                    s.add(TeamMember(**data))
+                s.commit()
+                members = list(s.scalars(select(TeamMember).order_by(TeamMember.created_at.asc())))
+            return [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "email": m.email,
+                    "role": m.role,
+                    "department": m.department,
+                    "status": m.status,
+                    "active_tickets_count": m.active_tickets_count,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in members
+            ]
+
+    @app.post("/api/team", status_code=201)
+    def create_team_member(body: TeamMemberCreate):
+        with app_ctx.session() as s:
+            member_id = body.id or f"SPT-{secrets.randbelow(9000) + 1000}"
+            existing = s.scalar(select(TeamMember).where(TeamMember.email == body.email))
+            if existing:
+                raise HTTPException(status_code=409, detail="Team member with this email already exists")
+            new_member = TeamMember(
+                id=member_id,
+                name=body.name,
+                email=body.email,
+                role=body.role,
+                department=body.department,
+                status=body.status,
+                active_tickets_count=body.active_tickets_count,
+            )
+            s.add(new_member)
+            s.commit()
+            s.refresh(new_member)
+            return {
+                "id": new_member.id,
+                "name": new_member.name,
+                "email": new_member.email,
+                "role": new_member.role,
+                "department": new_member.department,
+                "status": new_member.status,
+                "active_tickets_count": new_member.active_tickets_count,
+                "created_at": new_member.created_at.isoformat() if new_member.created_at else None,
+            }
+
+    @app.patch("/api/team/{member_id}")
+    def update_team_member(member_id: str, body: TeamMemberUpdate):
+        with app_ctx.session() as s:
+            member = s.get(TeamMember, member_id)
+            if not member:
+                raise HTTPException(status_code=404, detail="Team member not found")
+            if body.name is not None:
+                member.name = body.name
+            if body.role is not None:
+                member.role = body.role
+            if body.department is not None:
+                member.department = body.department
+            if body.status is not None:
+                member.status = body.status
+            if body.active_tickets_count is not None:
+                member.active_tickets_count = body.active_tickets_count
+            s.commit()
+            s.refresh(member)
+            return {
+                "id": member.id,
+                "name": member.name,
+                "email": member.email,
+                "role": member.role,
+                "department": member.department,
+                "status": member.status,
+                "active_tickets_count": member.active_tickets_count,
+                "created_at": member.created_at.isoformat() if member.created_at else None,
+            }
+
+    @app.delete("/api/team/{member_id}")
+    def delete_team_member(member_id: str):
+        with app_ctx.session() as s:
+            member = s.get(TeamMember, member_id)
+            if not member:
+                raise HTTPException(status_code=404, detail="Team member not found")
+            s.delete(member)
+            s.commit()
+            return {"status": "deleted", "id": member_id}
 
     app.include_router(create_customer_router(app_ctx))
     app.include_router(create_operator_support_router(app_ctx))

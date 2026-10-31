@@ -42,6 +42,8 @@ class TeamMemberCreate(BaseModel):
     status: str = Field(default="active", max_length=20)
     active_tickets_count: int = Field(default=0, ge=0)
     password: str | None = Field(default="relay123", max_length=100)
+    requester_role: str | None = None
+    requester_id: str | None = None
 
 
 class TeamMemberUpdate(BaseModel):
@@ -355,6 +357,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     @app.post("/api/team", status_code=201)
     def create_team_member(body: TeamMemberCreate):
+        is_admin = False
+        if body.requester_role and "admin" in body.requester_role.lower():
+            is_admin = True
+        if body.requester_id and body.requester_id.upper().startswith("ADM"):
+            is_admin = True
+        if not is_admin and (body.requester_role or body.requester_id):
+            raise HTTPException(403, "Permission Denied: Only administrators can add new support team members.")
+
         with app_ctx.session() as s:
             member_id = body.id or f"SPT-{secrets.randbelow(9000) + 1000}"
             existing = s.scalar(select(TeamMember).where(TeamMember.email == body.email))
@@ -425,7 +435,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             }
 
     @app.delete("/api/team/{member_id}")
-    def delete_team_member(member_id: str):
+    def delete_team_member(member_id: str, requester_role: str | None = None, requester_id: str | None = None):
+        is_admin = False
+        if requester_role and "admin" in requester_role.lower():
+            is_admin = True
+        if requester_id and requester_id.upper().startswith("ADM"):
+            is_admin = True
+        if not is_admin and (requester_role or requester_id):
+            raise HTTPException(403, "Permission Denied: Only administrators can remove support team members.")
+
         with app_ctx.session() as s:
             member = s.get(TeamMember, member_id)
             if not member:

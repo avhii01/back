@@ -18,6 +18,8 @@ class UpdateTicketStatusBody(BaseModel):
     assigned_to: str | None = None
     department: str | None = None
     resolution_notes: str | None = None
+    user_role: str | None = None
+    user_id: str | None = None
 
 
 ACTIVE_TICKET_STATUSES = ("new", "investigating", "recovering", "awaiting_approval")
@@ -135,9 +137,22 @@ def create_operator_support_router(ctx: AppContext) -> APIRouter:
                 row.status = clean_status
 
             if body.assigned_to is not None:
-                clean_assignee = body.assigned_to.strip() or "Unassigned"
-                evidence["assigned_to"] = clean_assignee
-                row.assigned_to = clean_assignee
+                new_assignee = body.assigned_to.strip() or "Unassigned"
+                current_assignee = row.assigned_to or evidence.get("assigned_to") or "Unassigned"
+                if current_assignee not in ("Unassigned", "") and new_assignee != current_assignee:
+                    is_admin = False
+                    if body.user_role and "admin" in body.user_role.lower():
+                        is_admin = True
+                    if body.user_id and body.user_id.upper().startswith("ADM"):
+                        is_admin = True
+                    if not is_admin and (body.user_role or body.user_id):
+                        raise HTTPException(
+                            403,
+                            f"Permission Denied: Ticket is assigned to {current_assignee}. Only Administrators can reassign tickets to another person."
+                        )
+
+                evidence["assigned_to"] = new_assignee
+                row.assigned_to = new_assignee
             if body.department is not None:
                 evidence["department"] = body.department.strip()
             if body.resolution_notes is not None:

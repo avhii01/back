@@ -53,6 +53,15 @@ class TeamMemberUpdate(BaseModel):
     password: str | None = None
 
 
+class UserCredentialsUpdate(BaseModel):
+    member_id: str = Field(min_length=1, max_length=60)
+    new_id: str | None = None
+    name: str | None = None
+    email: str | None = None
+    current_password: str | None = None
+    new_password: str | None = None
+
+
 class InjectBody(BaseModel):
     scenario: str
     variant: str | None = None
@@ -424,6 +433,100 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             s.delete(member)
             s.commit()
             return {"status": "deleted", "id": member_id}
+
+    # ------------------------------------------------------------------ user credentials update
+    @app.post("/api/user/credentials")
+    def update_user_credentials(body: UserCredentialsUpdate):
+        with app_ctx.session() as s:
+            from relay.support.auth import verify_password, hash_password
+            from sqlalchemy import or_, func
+            clean_id = body.member_id.strip()
+            member = s.scalar(
+                select(TeamMember).where(
+                    or_(
+                        TeamMember.id == clean_id,
+                        func.lower(TeamMember.email) == clean_id.lower(),
+                    )
+                )
+            )
+            if not member:
+                from relay.seed import DEFAULT_SEEDED_TEAM
+                for data in DEFAULT_SEEDED_TEAM:
+                    s.add(TeamMember(**data))
+                s.commit()
+                member = s.scalar(
+                    select(TeamMember).where(
+                        or_(
+                            TeamMember.id == clean_id,
+                            func.lower(TeamMember.email) == clean_id.lower(),
+                        )
+                    )
+                )
+                if not member:
+                    raise HTTPException(404, "User profile not found")
+
+            # Check current password if changing password
+            if body.new_password and body.new_password.strip():
+                new_pwd = body.new_password.strip()
+                if len(new_pwd) < 6:
+                    raise HTTPException(400, "New password must be at least 6 characters")
+                if body.current_password:
+                    curr_pwd = body.current_password.strip()
+                    if member.password_hash and not verify_password(curr_pwd, member.password_hash) and member.password != curr_pwd:
+                        raise HTTPException(400, "Current password is incorrect")
+                member.password = new_pwd
+                member.password_hash = hash_password(new_pwd)
+
+            if body.name and body.name.strip():
+                member.name = body.name.strip()
+
+            if body.email and body.email.strip():
+                member.email = body.email.strip().lower()
+
+            target_id = member.id
+            if body.new_id and body.new_id.strip() and body.new_id.strip() != member.id:
+                new_clean_id = body.new_id.strip()
+                existing = s.get(TeamMember, new_clean_id)
+                if existing and existing.id != member.id:
+                    raise HTTPException(409, f"ID '{new_clean_id}' is already in use by another team member")
+
+                old_id = member.id
+                target_id = new_clean_id
+                replacement = TeamMember(
+                    id=new_clean_id,
+                    name=member.name,
+                    email=member.email,
+                    role=member.role,
+                    department=member.department,
+                    status=member.status,
+                    active_tickets_count=member.active_tickets_count,
+                    password=member.password,
+                    password_hash=member.password_hash,
+                    created_at=member.created_at,
+                )
+                s.delete(member)
+                s.flush()
+                s.add(replacement)
+                member = replacement
+
+            s.commit()
+            s.refresh(member)
+
+            return {
+                "status": "ok",
+                "message": "Credentials updated successfully in database",
+                "member": {
+                    "id": member.id,
+                    "name": member.name,
+                    "email": member.email,
+                    "role": member.role,
+                    "department": member.department,
+                    "status": member.status,
+                    "password": member.password,
+                    "password_hash": member.password_hash,
+                },
+                "token": "adm_" + secrets.token_urlsafe(24),
+            }
 
     app.include_router(create_customer_router(app_ctx))
     app.include_router(create_operator_support_router(app_ctx))

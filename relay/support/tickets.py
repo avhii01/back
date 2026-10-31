@@ -96,6 +96,7 @@ def create_customer_ticket(app: AppContext, *, customer: Customer, order: Order,
             reason_code=reason, category=category, priority="high" if category == "PAYMENT_CONFLICT" else "normal",
             summary=confirmed_summary, confirmed_summary=confirmed_summary, citations=citations,
             service_evidence=evidence_data, source="customer",
+            assigned_to=evidence_data.get("assigned_to", "Unassigned"),
             status="awaiting" if dispatch else "escalated",
             resolution_summary=None if dispatch else "Waiting for a human specialist to review the request.",
         )
@@ -234,7 +235,7 @@ def ticket_operator_json(app: AppContext, ticket_id: str) -> dict | None:
                     and run.outcome in ("fulfilled", "refunded"))
     evidence = ticket.service_evidence or {}
     dept = evidence.get("department") or get_department(ticket.category, ticket.reason_code)
-    assigned = evidence.get("assigned_to") or "Unassigned"
+    assigned = ticket.assigned_to or evidence.get("assigned_to") or "Unassigned"
     query_text = ticket.confirmed_summary or ticket.summary
     raised_at = evidence.get("raised_at") or ticket.created_at.isoformat()
     resolved_at = evidence.get("resolved_at")

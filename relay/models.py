@@ -243,6 +243,7 @@ class SupportTicket(Base):
     resolution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="agent")
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(120), default="Unassigned", nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 

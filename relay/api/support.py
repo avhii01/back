@@ -56,7 +56,7 @@ def create_operator_support_router(ctx: AppContext) -> APIRouter:
             from relay.support.tickets import get_department
             evidence = ticket.service_evidence or {}
             dept = evidence.get("department") or get_department(ticket.category, ticket.reason_code)
-            assigned = evidence.get("assigned_to") or "Unassigned"
+            assigned = ticket.assigned_to or evidence.get("assigned_to") or "Unassigned"
             query_text = ticket.confirmed_summary or ticket.summary
             raised_at = evidence.get("raised_at") or ticket.created_at.isoformat()
             resolved_at = evidence.get("resolved_at")
@@ -135,7 +135,9 @@ def create_operator_support_router(ctx: AppContext) -> APIRouter:
                 row.status = clean_status
 
             if body.assigned_to is not None:
-                evidence["assigned_to"] = body.assigned_to.strip() or "Unassigned"
+                clean_assignee = body.assigned_to.strip() or "Unassigned"
+                evidence["assigned_to"] = clean_assignee
+                row.assigned_to = clean_assignee
             if body.department is not None:
                 evidence["department"] = body.department.strip()
             if body.resolution_notes is not None:

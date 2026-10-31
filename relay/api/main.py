@@ -318,7 +318,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     # ------------------------------------------------------------------ team members
     @app.get("/api/team")
-    def list_team_members():
+    def list_team_members(requester_role: str | None = None, requester_id: str | None = None):
+        is_admin = False
+        if requester_role and "admin" in requester_role.lower():
+            is_admin = True
+        if requester_id and requester_id.upper().startswith("ADM"):
+            is_admin = True
+
         with app_ctx.session() as s:
             from relay.seed import DEFAULT_SEEDED_TEAM
             from relay.support.auth import hash_password
@@ -348,8 +354,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     "department": m.department,
                     "status": m.status,
                     "active_tickets_count": m.active_tickets_count,
-                    "password": m.password,
-                    "password_hash": m.password_hash,
+                    "password": m.password if is_admin else None,
+                    "password_hash": m.password_hash if is_admin else None,
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                 }
                 for m in members

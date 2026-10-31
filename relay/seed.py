@@ -16,7 +16,7 @@ from relay.context import build_context
 from relay.knowledge.ingest import ingest
 from relay.logging_utils import configure_logging
 from relay.models import Order, TeamMember
-from relay.support.auth import upsert_customer
+from relay.support.auth import hash_password, upsert_customer
 from relay.support.demo import DEMO_CUSTOMERS, SCENARIO_OWNER
 
 log = logging.getLogger("relay.seed")
@@ -38,6 +38,8 @@ DEFAULT_SEEDED_TEAM = [
         "department": "Customer Operations & Reliability",
         "status": "active",
         "active_tickets_count": 4,
+        "password": "admin-relay",
+        "password_hash": hash_password("admin-relay"),
     },
     {
         "id": "SPT-1002",
@@ -47,6 +49,8 @@ DEFAULT_SEEDED_TEAM = [
         "department": "Payments & Billing",
         "status": "active",
         "active_tickets_count": 2,
+        "password": "relay123",
+        "password_hash": hash_password("relay123"),
     },
     {
         "id": "SPT-1003",
@@ -56,6 +60,8 @@ DEFAULT_SEEDED_TEAM = [
         "department": "Customer Operations",
         "status": "active",
         "active_tickets_count": 3,
+        "password": "relay123",
+        "password_hash": hash_password("relay123"),
     },
     {
         "id": "SPT-1004",
@@ -65,6 +71,8 @@ DEFAULT_SEEDED_TEAM = [
         "department": "Shipping & Logistics",
         "status": "active",
         "active_tickets_count": 1,
+        "password": "relay123",
+        "password_hash": hash_password("relay123"),
     },
 ]
 
@@ -76,8 +84,13 @@ def seed_team(app) -> None:
                 existing = s.scalar(select(TeamMember).where(TeamMember.id == member["id"]))
                 if not existing:
                     s.add(TeamMember(**member))
+                else:
+                    if not existing.password:
+                        existing.password = member["password"]
+                    if not existing.password_hash:
+                        existing.password_hash = member["password_hash"]
             s.commit()
-            log.info("seeded support team members into database")
+            log.info("seeded support team members and credentials into database")
     except Exception:
         log.exception("failed to seed team members")
 

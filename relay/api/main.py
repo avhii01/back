@@ -41,6 +41,7 @@ class TeamMemberCreate(BaseModel):
     department: str = Field(min_length=1, max_length=120)
     status: str = Field(default="active", max_length=20)
     active_tickets_count: int = Field(default=0, ge=0)
+    password: str | None = Field(default="relay123", max_length=100)
 
 
 class TeamMemberUpdate(BaseModel):
@@ -49,6 +50,7 @@ class TeamMemberUpdate(BaseModel):
     department: str | None = None
     status: str | None = None
     active_tickets_count: int | None = None
+    password: str | None = None
 
 
 class InjectBody(BaseModel):
@@ -105,8 +107,42 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # ------------------------------------------------------------------ admin session
     @app.post("/api/admin/session")
     def admin_session(body: AdminSignInBody):
+        from sqlalchemy import or_, func
+        from relay.support.auth import verify_password
         email_clean = body.email.strip().lower()
-        if email_clean in ("admin@relay.test", "admin") and body.password.strip() == "admin-relay":
+        pwd = body.password.strip()
+
+        with app_ctx.session() as s:
+            member = s.scalar(
+                select(TeamMember).where(
+                    or_(
+                        func.lower(TeamMember.email) == email_clean,
+                        func.lower(TeamMember.id) == email_clean,
+                    )
+                )
+            )
+            if member:
+                valid = False
+                if member.password_hash and verify_password(pwd, member.password_hash):
+                    valid = True
+                elif member.password and member.password == pwd:
+                    valid = True
+                elif pwd in ("admin-relay", "relay123", "password", "admin"):
+                    valid = True
+
+                if valid:
+                    token = "adm_" + secrets.token_urlsafe(24)
+                    return {
+                        "token": token,
+                        "admin": {
+                            "id": member.id,
+                            "email": member.email,
+                            "name": member.name,
+                            "role": f"{member.role} ({member.department})",
+                        },
+                    }
+
+        if email_clean in ("admin@relay.test", "admin") and pwd == "admin-relay":
             token = "adm_" + secrets.token_urlsafe(24)
             return {
                 "token": token,
@@ -117,7 +153,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     "role": "Lead Recovery Specialist & Operations Admin",
                 },
             }
-        elif len(email_clean) > 0 and body.password.strip() in ("admin-relay", "password", "relay123", "admin"):
+        elif len(email_clean) > 0 and pwd in ("admin-relay", "password", "relay123", "admin"):
             token = "adm_" + secrets.token_urlsafe(24)
             user_part = email_clean.split("@")[0]
             admin_id = "ADM-" + user_part.upper()[:10]
@@ -131,7 +167,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     "role": "Support Specialist & Operator",
                 },
             }
-        raise HTTPException(401, "Invalid admin credentials. Use admin@relay.test / admin-relay")
+        raise HTTPException(401, "Invalid credentials. Use your Team Member ID or Work Email and Password.")
 
     # ------------------------------------------------------------------ meta
     @app.get("/api/health")
@@ -273,13 +309,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/team")
     def list_team_members():
         with app_ctx.session() as s:
+            from relay.seed import DEFAULT_SEEDED_TEAM
+            from relay.support.auth import hash_password
             members = list(s.scalars(select(TeamMember).order_by(TeamMember.created_at.asc())))
             if not members:
-                from relay.seed import DEFAULT_SEEDED_TEAM
                 for data in DEFAULT_SEEDED_TEAM:
                     s.add(TeamMember(**data))
                 s.commit()
                 members = list(s.scalars(select(TeamMember).order_by(TeamMember.created_at.asc())))
+            else:
+                changed = False
+                for m in members:
+                    if not m.password:
+                        m.password = "admin-relay" if m.id == "ADM-9041" else "relay123"
+                        changed = True
+                    if not m.password_hash:
+                        m.password_hash = hash_password(m.password)
+                        changed = True
+                if changed:
+                    s.commit()
             return [
                 {
                     "id": m.id,
@@ -289,6 +337,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     "department": m.department,
                     "status": m.status,
                     "active_tickets_count": m.active_tickets_count,
+                    "password": m.password,
+                    "password_hash": m.password_hash,
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                 }
                 for m in members
@@ -301,6 +351,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             existing = s.scalar(select(TeamMember).where(TeamMember.email == body.email))
             if existing:
                 raise HTTPException(status_code=409, detail="Team member with this email already exists")
+            raw_password = (body.password or "relay123").strip()
+            from relay.support.auth import hash_password
             new_member = TeamMember(
                 id=member_id,
                 name=body.name,
@@ -309,6 +361,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 department=body.department,
                 status=body.status,
                 active_tickets_count=body.active_tickets_count,
+                password=raw_password,
+                password_hash=hash_password(raw_password),
             )
             s.add(new_member)
             s.commit()
@@ -321,6 +375,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 "department": new_member.department,
                 "status": new_member.status,
                 "active_tickets_count": new_member.active_tickets_count,
+                "password": new_member.password,
+                "password_hash": new_member.password_hash,
                 "created_at": new_member.created_at.isoformat() if new_member.created_at else None,
             }
 
@@ -340,6 +396,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 member.status = body.status
             if body.active_tickets_count is not None:
                 member.active_tickets_count = body.active_tickets_count
+            if body.password is not None and body.password.strip():
+                from relay.support.auth import hash_password
+                member.password = body.password.strip()
+                member.password_hash = hash_password(body.password.strip())
             s.commit()
             s.refresh(member)
             return {
@@ -350,6 +410,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 "department": member.department,
                 "status": member.status,
                 "active_tickets_count": member.active_tickets_count,
+                "password": member.password,
+                "password_hash": member.password_hash,
                 "created_at": member.created_at.isoformat() if member.created_at else None,
             }
 

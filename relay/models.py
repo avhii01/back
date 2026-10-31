@@ -361,4 +361,6 @@ class TeamMember(Base):
     department: Mapped[str] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(String(20), default="active")
     active_tickets_count: Mapped[int] = mapped_column(Integer, default=0)
+    password: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -10,7 +10,10 @@ target_metadata = Base.metadata
 
 
 def _url() -> str:
-    return os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or "sqlite:///./relay.db"
+    url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or "sqlite:///./relay.db"
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
 
 
 def run_migrations_offline() -> None:

@@ -11,7 +11,6 @@ RUN pip install --no-cache-dir ".[rag]"
 
 COPY alembic.ini ./
 COPY migrations ./migrations
-COPY users.xlsx users.csv ./
 COPY start.sh ./
 RUN chmod +x start.sh
 

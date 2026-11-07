@@ -1,33 +1,121 @@
-# Relay - AI Order Recovery Agent (Backend & Services)
+# Relay — Backend & Autonomous AI Recovery Engine
 
-Production FastAPI orchestrator, deterministic policy engine, and simulated external microservices (payments, inventory, and logistics carrier dispatch).
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon%20Serverless-4169E1.svg?logo=postgresql&logoColor=white)](https://neon.tech)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red.svg)](https://www.sqlalchemy.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com)
+[![Pytest](https://img.shields.io/badge/Pytest-100%2B%20Tests-brightgreen.svg)]()
 
-## Architecture & Services
-- **Relay Core API Engine** (FastAPI): State machine, run graph executors, ticket queues, admin auth.
-- **Deterministic Policy Engine**: Evaluates `P-ALLOW`, `P-REFUND-MAX`, `P-HOLD-SLA` without language model hallucination.
-- **Simulated Gateways** (`sim_services`): Simulated payment capture & refund, warehouse stock reservation, carrier waybills.
-- **Relational Persistence**: PostgreSQL 16 schema with Alembic migrations.
+> **Live Backend API & Interactive Swagger UI:** [https://backend-pvco.onrender.com/docs](https://backend-pvco.onrender.com/docs)  
+> **Frontend Repository:** [https://github.com/avhii01/front](https://github.com/avhii01/front)
 
-## Local Development
-```bash
-# Install dependencies
-pip install -r requirements.txt
-pip install -e .
+---
 
-# Run migrations & seed data
-alembic upgrade head
-python -m relay.seed
+## 📌 Problem Statement
 
-# Start backend server
-uvicorn relay.main:app --host 0.0.0.0 --port 8000
+In distributed e-commerce and logistics systems, fulfillment orders frequently fail mid-transaction due to transient network drops, inventory race conditions, or third-party carrier outages.
+
+Traditional automated recovery mechanisms either blindly retry (causing duplicate charges or duplicate shipments) or halt entirely, flooding human operators with manual tickets. Meanwhile, directly hooking up LLM agents to mutating APIs risks hallucinations, unauthorized refunds, and security breaches.
+
+---
+
+## 💡 The Solution: Dual-Engine Recovery Architecture
+
+Relay Backend solves this via a **hybrid dual-engine architecture**:
+1. **Autonomous Reasoning Agent (LLM / ReAct Planner):** Observes microservice evidence, diagnoses failure causes, and proposes corrective action sequences.
+2. **Deterministic Policy Engine:** An infallible gatekeeper (`P-ALLOW`, `P-REFUND-MAX`, `P-HOLD-SLA`, `P-RESOLVE-PERM`) that intercepts and verifies every tool proposal before execution.
+3. **Idempotency Guarantees:** Every mutating tool execution generates a deterministic `idempotency_key` (e.g. `ship:ORD-ABC123`), ensuring safe retries without double-execution.
+4. **Financial Safeguards:** Any refund exceeding **\$50.00 USD** automatically pauses the workflow and mandates human operator review.
+5. **Grounded RAG Support Engine:** Customer support queries query chunked vector embeddings and return answers grounded in verified company policy with section citations.
+6. **Strict Role-Based Access Control (RBAC):**
+   * Passwords hashed with **PBKDF2-HMAC-SHA256 (120,000 iterations)**.
+   * `GET /api/team` enforces field-level security: only administrators can view passwords; non-admins receive redacted values.
+   * Ticket reassignment is locked to administrators only.
+
+---
+
+## 🏗️ Architecture & Component Overview
+
+```
+backend/
+├── relay/
+│   ├── agent/             # ReAct loop, LLM planner, rule-based planner, runner
+│   ├── api/               # FastAPI route controllers (main, support, customer, serializers)
+│   ├── knowledge/         # Vector embeddings, RAG ingestion, document chunking
+│   ├── support/           # Background job dispatch, customer auth, ticket lifecycle
+│   ├── config.py          # Pydantic v2 application settings
+│   ├── models.py          # SQLAlchemy 2.0 ORM database schema definitions
+│   └── seed.py            # Initial seed data (team specialists, demo customers, orders)
+├── sim_services/          # Simulated microservices (Stripe payments, warehouse stock, carrier shipping)
+├── migrations/            # Alembic schema migration versions (Neon PostgreSQL)
+└── tests/                 # 100+ Pytest unit, integration, and scenario tests
 ```
 
-## Render Deployment
-- **Environment**: Python 3
-- **Build Command**: `pip install -r requirements.txt && pip install -e .`
-- **Start Command**: `bash start.sh`
-- **Required Environment Variables**:
-  - `DATABASE_URL`: Connection string to PostgreSQL
-  - `CORS_ORIGINS`: `*` (or your frontend domain)
-  - `DEMO_CUSTOMER_AUTH`: `true`
-  - `JOB_WORKER_ENABLED`: `true`
+---
+
+## 🔑 Pre-Configured Seed Credentials
+
+### Admin & Operations Team
+* **Lead Admin (`ADM-9041`):** `admin.operator@relay.internal` | Password: `admin-relay` (Full Admin Privileges)
+* **Senior Specialist (`SPT-1002`):** `sarah.jenkins@relay.internal` | Password: `relay123`
+* **Support Specialist (`SPT-1003`):** `michael.torres@relay.internal` | Password: `relay123`
+* **Logistics Coordinator (`SPT-1004`):** `elena.rostova@relay.internal` | Password: `relay123`
+
+### Demo Customers
+* **Alice Demo (`cus_alice`):** `alice@example.test` | Password: `demo-alice`
+* **Bob Demo (`cus_bob`):** `bob@example.test` | Password: `demo-bob`
+* **Carol Demo (`cus_carol`):** `carol@example.test` | Password: `demo-carol`
+
+---
+
+## 🚀 Local Development
+
+### 1. Environment & Dependencies
+```bash
+python -m venv .venv
+# Activate:
+# Windows: .venv\Scripts\activate
+# Mac/Linux: source .venv/bin/activate
+
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 2. Database Migrations & Seeding
+```bash
+# Apply Alembic migrations
+alembic upgrade head
+
+# Seed initial database rows
+python -m relay.seed
+```
+
+### 3. Run Development Server
+```bash
+uvicorn relay.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Interactive Swagger Documentation will be available at: `http://localhost:8000/docs`
+
+---
+
+## 🧪 Testing
+
+Run the automated test suite:
+```bash
+pytest backend
+```
+
+---
+
+## 🐳 Docker Container Deployment
+
+```bash
+docker build -t relay-backend .
+docker run -p 8000:8000 -e DATABASE_URL="your-postgres-url" relay-backend
+```
+
+---
+
+## 📄 License
+MIT License

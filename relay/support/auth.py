@@ -127,13 +127,13 @@ def save_user_to_excel(
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Registered Users"
-            headers = ["Registered At (UTC)", "User ID", "Name", "Email", "Password"]
+            headers = ["Registered At (UTC)", "User ID", "Name", "Email", "Password Status"]
             ws.append(headers)
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
 
-        ws.append([now_str, user_id, name, email, password])
+        ws.append([now_str, user_id, name, email, "[PROTECTED / PBKDF2 HASHED]"])
         wb.save(target_path)
         logger.info("Saved user %s to excel %s", email, target_path)
     except Exception as e:
@@ -146,8 +146,8 @@ def save_user_to_excel(
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             if not file_exists or csv_path.stat().st_size == 0:
-                writer.writerow(["Registered At (UTC)", "User ID", "Name", "Email", "Password"])
-            writer.writerow([now_str, user_id, name, email, password])
+                writer.writerow(["Registered At (UTC)", "User ID", "Name", "Email", "Password Status"])
+            writer.writerow([now_str, user_id, name, email, "[PROTECTED / PBKDF2 HASHED]"])
         logger.info("Saved user %s to csv %s", email, csv_path)
     except Exception as e:
         logger.warning("Could not write user to csv: %s", e)

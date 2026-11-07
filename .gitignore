@@ -26,3 +26,11 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 *.log
+
+# User registration spreadsheets & databases (protected data)
+users.xlsx
+users.csv
+*.xlsx
+*.csv
+*.db
+*.db-*

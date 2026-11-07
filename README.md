@@ -54,18 +54,13 @@ backend/
 
 ---
 
-## 🔑 Pre-Configured Seed Credentials
+## 🔐 Authentication & Data Protection
 
-### Admin & Operations Team
-* **Lead Admin (`ADM-9041`):** `admin.operator@relay.internal` | Password: `admin-relay` (Full Admin Privileges)
-* **Senior Specialist (`SPT-1002`):** `sarah.jenkins@relay.internal` | Password: `relay123`
-* **Support Specialist (`SPT-1003`):** `michael.torres@relay.internal` | Password: `relay123`
-* **Logistics Coordinator (`SPT-1004`):** `elena.rostova@relay.internal` | Password: `relay123`
-
-### Demo Customers
-* **Alice Demo (`cus_alice`):** `alice@example.test` | Password: `demo-alice`
-* **Bob Demo (`cus_bob`):** `bob@example.test` | Password: `demo-bob`
-* **Carol Demo (`cus_carol`):** `carol@example.test` | Password: `demo-carol`
+To protect system integrity and prevent unauthorized access:
+* **PBKDF2 Hashing:** All operator and customer credentials are cryptographically secured using salted PBKDF2-HMAC-SHA256 with 120,000 hash iterations. Plaintext passwords are never stored in databases or exported to disk.
+* **Role-Based Redaction:** Non-admin operators querying the team roster receive strictly redacted responses (`password: null`, `password_hash: null`). Only authenticated administrators can inspect and manage team credentials.
+* **Customer Data Isolation:** Customer tokens resolve strictly to authenticated customer rows. Cross-tenant order inspections or modifications are blocked server-side.
+* **Credential Seeding:** Initial demo accounts are initialized securely via `.env` configuration and the internal database seeder (`relay.seed`). Plaintext credentials are never committed to public repositories.
 
 ---
 

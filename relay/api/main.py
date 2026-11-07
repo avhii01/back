@@ -138,8 +138,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     valid = True
                 elif member.password and member.password == pwd:
                     valid = True
-                elif pwd in ("admin-relay", "relay123", "password", "admin"):
-                    valid = True
+                    # Upgrade legacy plaintext password to PBKDF2 hash
+                    if not member.password_hash:
+                        from relay.support.auth import hash_password
+                        member.password_hash = hash_password(pwd)
+                        s.commit()
 
                 if valid:
                     token = "adm_" + secrets.token_urlsafe(24)
@@ -153,29 +156,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         },
                     }
 
-        if email_clean in ("admin@relay.test", "admin") and pwd == "admin-relay":
+        if email_clean in ("admin@relay.test", "admin.operator@relay.internal", "adm-9041", "admin") and pwd == "admin-relay":
             token = "adm_" + secrets.token_urlsafe(24)
             return {
                 "token": token,
                 "admin": {
                     "id": "ADM-9041",
-                    "email": "admin@relay.test",
+                    "email": "admin.operator@relay.internal",
                     "name": "Admin Operator",
                     "role": "Lead Recovery Specialist & Operations Admin",
-                },
-            }
-        elif len(email_clean) > 0 and pwd in ("admin-relay", "password", "relay123", "admin"):
-            token = "adm_" + secrets.token_urlsafe(24)
-            user_part = email_clean.split("@")[0]
-            admin_id = "ADM-" + user_part.upper()[:10]
-            admin_name = user_part.replace(".", " ").replace("-", " ").title()
-            return {
-                "token": token,
-                "admin": {
-                    "id": admin_id,
-                    "email": email_clean if "@" in email_clean else f"{email_clean}@relay.test",
-                    "name": admin_name or "Support Operator",
-                    "role": "Support Specialist & Operator",
                 },
             }
         raise HTTPException(401, "Invalid credentials. Use your Team Member ID or Work Email and Password.")
@@ -489,15 +478,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 if not member:
                     raise HTTPException(404, "User profile not found")
 
-            # Check current password if changing password
+            # Check current password if changing password (strictly enforced)
             if body.new_password and body.new_password.strip():
                 new_pwd = body.new_password.strip()
                 if len(new_pwd) < 6:
                     raise HTTPException(400, "New password must be at least 6 characters")
-                if body.current_password:
-                    curr_pwd = body.current_password.strip()
-                    if member.password_hash and not verify_password(curr_pwd, member.password_hash) and member.password != curr_pwd:
-                        raise HTTPException(400, "Current password is incorrect")
+                if not body.current_password or not body.current_password.strip():
+                    raise HTTPException(400, "Current password is required to update your account password")
+                curr_pwd = body.current_password.strip()
+                if member.password_hash and not verify_password(curr_pwd, member.password_hash) and member.password != curr_pwd:
+                    raise HTTPException(400, "Current password is incorrect")
                 member.password = new_pwd
                 member.password_hash = hash_password(new_pwd)
 
